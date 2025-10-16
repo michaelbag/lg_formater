@@ -69,6 +69,24 @@ class CSVUploadLog(models.Model):
         verbose_name="Содержит заголовки столбцов",
         help_text="Отметьте, если первая строка содержит названия столбцов"
     )
+    
+    # Разделители столбцов
+    DELIMITER_CHOICES = [
+        (',', 'Запятая (,)'),
+        (';', 'Точка с запятой (;)'),
+        ('\t', 'Табуляция (\\t)'),
+        ('|', 'Вертикальная черта (|)'),
+        (' ', 'Пробел ( )'),
+        (':', 'Двоеточие (:)'),
+    ]
+    
+    delimiter = models.CharField(
+        max_length=1,
+        choices=DELIMITER_CHOICES,
+        default=',',
+        verbose_name="Разделитель столбцов",
+        help_text="Символ, используемый для разделения столбцов в CSV файле"
+    )
     original_file = models.FileField(
         upload_to=csv_upload_path,
         blank=True,
@@ -116,6 +134,26 @@ class CSVUploadLog(models.Model):
                     self.author = superuser
         
         super().save(*args, **kwargs)
+    
+    def auto_detect_delimiter(self):
+        """
+        Автоматически определяет разделитель в CSV файле
+        """
+        if not self.original_file:
+            return self.delimiter
+        
+        from .csv_processor import CSVProcessor
+        processor = CSVProcessor(self)
+        detected_delimiter = processor.auto_detect_and_set_delimiter()
+        return detected_delimiter
+    
+    def process_csv_data(self):
+        """
+        Обрабатывает CSV файл и сохраняет данные в базу
+        """
+        from .csv_processor import CSVProcessor
+        processor = CSVProcessor(self)
+        return processor.process_csv_file()
 
 
 class CSVData(models.Model):

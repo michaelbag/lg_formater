@@ -82,5 +82,7 @@ https://github.com/michaelbag/lg_for
    ```bash
    ./start_server.sh
    # или
-   python manage.py runserver 0.0.0.0:8000
+   python manage.py runserver 0.0.0.0:8001
    ```
+   
+   Сервер будет доступен на всех IP адресах по порту 8001

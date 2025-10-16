@@ -17,12 +17,14 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
         'rows_count', 
         'columns_count', 
         'has_headers',
+        'delimiter_display',
         'status',
         'download_link'
     ]
     list_filter = [
         'status', 
         'has_headers',
+        'delimiter',
         'upload_date', 
         'author'
     ]
@@ -64,7 +66,7 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
             'fields': ('file_size', 'rows_count', 'columns_count')
         }),
         ('Настройки файла', {
-            'fields': ('has_headers', 'original_file')
+            'fields': ('has_headers', 'delimiter', 'original_file')
         }),
         ('Статус обработки', {
             'fields': ('status', 'error_message')
@@ -83,6 +85,59 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
             obj.author = request.user
             
         super().save_model(request, obj, form, change)
+    
+    def response_change(self, request, obj):
+        """Обработка кнопок действий"""
+        if "_auto_detect_delimiter" in request.POST:
+            if not obj.original_file:
+                messages.warning(request, "Файл не загружен для определения разделителя.")
+            else:
+                try:
+                    detected_delimiter = obj.auto_detect_delimiter()
+                    delimiter_names = {
+                        ',': 'Запятая',
+                        ';': 'Точка с запятой',
+                        '\t': 'Табуляция',
+                        '|': 'Вертикальная черта',
+                        ' ': 'Пробел',
+                        ':': 'Двоеточие',
+                    }
+                    delimiter_name = delimiter_names.get(detected_delimiter, detected_delimiter)
+                    messages.success(request, f"Разделитель определен автоматически: {delimiter_name}")
+                except Exception as e:
+                    messages.error(request, f"Ошибка определения разделителя: {e}")
+            return HttpResponseRedirect(request.path)
+        
+        if "_process_csv" in request.POST:
+            if not obj.original_file:
+                messages.warning(request, "Файл не загружен для обработки.")
+            else:
+                try:
+                    result = obj.process_csv_data()
+                    messages.success(
+                        request, 
+                        f"CSV файл обработан успешно! "
+                        f"Строк: {result['rows_count']}, "
+                        f"Столбцов: {result['columns_count']}"
+                    )
+                except Exception as e:
+                    messages.error(request, f"Ошибка обработки CSV файла: {e}")
+            return HttpResponseRedirect(request.path)
+        
+        return super().response_change(request, obj)
+    
+    def delimiter_display(self, obj):
+        """Отображает разделитель в удобном виде"""
+        delimiter_map = {
+            ',': 'Запятая',
+            ';': 'Точка с запятой',
+            '\t': 'Табуляция',
+            '|': 'Вертикальная черта',
+            ' ': 'Пробел',
+            ':': 'Двоеточие',
+        }
+        return delimiter_map.get(obj.delimiter, obj.delimiter)
+    delimiter_display.short_description = 'Разделитель'
     
     def download_link(self, obj):
         """
