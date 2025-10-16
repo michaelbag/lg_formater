@@ -1,0 +1,31 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block submit_buttons_bottom %}
+    {{ block.super }}
+    
+    {% if original and original.pk %}
+        <div class="submit-row">
+            {% if original.can_start_generation %}
+                <input type="submit" value="🚀 Запустить генерацию" class="default" name="_start_generation">
+            {% else %}
+                <input type="submit" value="🚀 Запустить генерацию" class="default" name="_start_generation" disabled title="Генерация не может быть запущена">
+            {% endif %}
+            
+            {% if original.is_processing %}
+                <input type="submit" value="⏹️ Отменить генерацию" class="default" name="_cancel_generation">
+            {% endif %}
+        </div>
+        
+        {% if not original.can_start_generation %}
+            <div class="help">
+                <h4>Ошибки, препятствующие запуску генерации:</h4>
+                <ul>
+                    {% for error in original.get_generation_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    {% endif %}
+{% endblock %}

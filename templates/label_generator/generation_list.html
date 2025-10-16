@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .generation-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .generation-header { font-weight: bold; font-size: 18px; margin-bottom: 10px; }
+        .generation-info { color: #666; margin: 5px 0; }
+        .generation-actions { margin-top: 10px; }
+        .btn { padding: 8px 16px; margin: 5px; text-decoration: none; border-radius: 3px; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .status-pending { color: #ffc107; }
+        .status-processing { color: #17a2b8; }
+        .status-completed { color: #28a745; }
+        .status-failed { color: #dc3545; }
+        .status-cancelled { color: #6c757d; }
+    </style>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    
+    {% if generations %}
+        {% for generation in generations %}
+        <div class="generation-card">
+            <div class="generation-header">{{ generation.name }}</div>
+            <div class="generation-info">
+                <strong>Источник данных:</strong> {{ generation.data_source.filename }}<br>
+                <strong>Шаблон:</strong> {{ generation.template.name }}<br>
+                <strong>Статус:</strong> <span class="status-{{ generation.status }}">{{ generation.get_status_display }}</span><br>
+                <strong>Прогресс:</strong> {{ generation.progress_percent }}% ({{ generation.generated_labels }}/{{ generation.total_labels }})<br>
+                <strong>Создано:</strong> {{ generation.created_at|date:"d.m.Y H:i" }}
+                {% if generation.completed_at %}
+                <br><strong>Завершено:</strong> {{ generation.completed_at|date:"d.m.Y H:i" }}
+                {% endif %}
+            </div>
+            <div class="generation-actions">
+                <a href="{% url 'label_generator:generation_detail' generation.id %}" class="btn btn-primary">Подробнее</a>
+                {% if generation.is_completed and generation.output_file %}
+                <a href="{% url 'label_generator:download_generated_file' generation.id %}" class="btn btn-success">Скачать</a>
+                {% endif %}
+                {% if generation.logs.exists %}
+                <a href="{% url 'label_generator:generation_logs' generation.id %}" class="btn btn-secondary">Логи</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p>Генерации не найдены.</p>
+    {% endif %}
+    
+    <p><a href="{% url 'label_generator:create_generation' %}" class="btn btn-primary">Создать новую генерацию</a></p>
+    <p><a href="/admin/label_generator/labelgeneration/add/">Создать через админ-панель</a></p>
+</body>
+</html>
