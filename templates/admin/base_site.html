@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% trans 'Django site admin' %}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">
+        {% trans 'LG Formater Admin' %}
+    </a>
+</h1>
+{% endblock %}
+
+{% block nav-breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    {% if title %} &rsaquo; {{ title }}{% endif %}
+</div>
+
+<!-- Предупреждение о статусе разработки -->
+<div style="background-color: #ff6b6b; color: white; padding: 10px; margin: 10px 0; border-radius: 5px; text-align: center; font-weight: bold;">
+    ⚠️ ВНИМАНИЕ: ПРОЕКТ В РАЗРАБОТКЕ - НЕ ДЛЯ ПРОМЫШЛЕННОЙ ЭКСПЛУАТАЦИИ ⚠️
+    <br>
+    <small>Статус: НЕ РАБОЧИЙ | Версия: 0.1.0-dev</small>
+</div>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
