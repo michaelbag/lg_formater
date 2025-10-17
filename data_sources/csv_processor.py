@@ -124,29 +124,39 @@ class CSVProcessor:
         # Сохраняем новые данные
         for row_index, row in enumerate(rows[start_row-1:], start_row):
             for col_index, cell_value in enumerate(row, 1):
+                # Получаем объект CSVColumn для данного столбца
+                csv_column = self._get_csv_column(col_index)
                 CSVData.objects.create(
                     upload_log=self.upload_log,
                     row_number=row_index,
                     column_number=col_index,
-                    column_name=self._get_column_name(col_index),
+                    csv_column=csv_column,
                     cell_value=cell_value.strip() if cell_value else ''
                 )
     
-    def _get_column_name(self, column_number: int) -> str:
+    def _get_csv_column(self, column_number: int) -> CSVColumn:
         """
-        Получает название столбца по номеру
+        Получает объект CSVColumn по номеру столбца
         """
-        if self.has_headers:
-            try:
-                column = CSVColumn.objects.get(
-                    upload_log=self.upload_log,
-                    column_number=column_number
-                )
-                return column.column_name
-            except CSVColumn.DoesNotExist:
-                pass
+        # Сначала пытаемся найти существующий столбец
+        try:
+            return CSVColumn.objects.get(
+                upload_log=self.upload_log,
+                column_number=column_number
+            )
+        except CSVColumn.DoesNotExist:
+            pass
         
-        return f"Столбец {column_number}"
+        # Если столбец не найден, создаем его
+        return CSVColumn.objects.create(
+            upload_log=self.upload_log,
+            column_number=column_number,
+            column_name=f"Столбец {column_number}",
+            original_name=f"Столбец {column_number}",
+            data_type='text',
+            is_required=False,
+            description=f"Автоматически созданный столбец {column_number}"
+        )
     
     def detect_delimiter(self, sample_size: int = 1024) -> str:
         """

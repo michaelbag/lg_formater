@@ -85,6 +85,9 @@ class LabelTemplateAdmin(admin.ModelAdmin):
     
     def save_model(self, request, obj, form, change):
         """Автоматически устанавливает создателя при сохранении"""
+        # Передаем текущего пользователя в модель для автоматического заполнения
+        obj._current_user = request.user
+        
         if not change:  # Если это новый объект
             obj.created_by = request.user
         super().save_model(request, obj, form, change)

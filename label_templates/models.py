@@ -280,11 +280,24 @@ class LabelTemplate(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Переопределяем save для автоматического определения размеров
+        Переопределяем save для автоматического определения размеров и заполнения created_by
         """
         # Если это новый объект и есть файл, определяем размеры автоматически
         if not self.pk and self.template_file:
             self.auto_detect_dimensions()
+        
+        # Если это новый объект и created_by не заполнен, пытаемся получить текущего пользователя
+        if not self.pk and not self.created_by_id:
+            # Проверяем, есть ли текущий пользователь в контексте
+            if hasattr(self, '_current_user') and self._current_user:
+                self.created_by = self._current_user
+            else:
+                # Если нет текущего пользователя, берем первого суперпользователя
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                superuser = User.objects.filter(is_superuser=True).first()
+                if superuser:
+                    self.created_by = superuser
         
         # Валидируем модель
         self.clean()
@@ -302,6 +315,7 @@ class TemplateField(models.Model):
         ('date', 'Дата'),
         ('barcode', 'Штрих-код'),
         ('qr', 'QR-код'),
+        ('datamatrix', 'DataMatrix (DS)'),
         ('image', 'Изображение'),
     ]
     

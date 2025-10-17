@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
+from django.contrib import messages
+from django.http import HttpResponseRedirect
 from .models import CSVUploadLog, CSVData, CSVColumn
 
 
@@ -9,13 +11,15 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
     """
     Админ-панель для журнала загрузки CSV файлов
     """
+    change_form_template = 'admin/data_sources/csvuploadlog/change_form.html'
+    
     list_display = [
         'filename', 
         'author', 
         'upload_date', 
         'file_size', 
-        'rows_count', 
-        'columns_count', 
+        'rows_count_display', 
+        'columns_count_display', 
         'has_headers',
         'delimiter_display',
         'status',
@@ -86,6 +90,18 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
             
         super().save_model(request, obj, form, change)
     
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        """
+        Добавляем дополнительные кнопки в контекст
+        """
+        if obj and obj.pk and obj.original_file:
+            context['show_csv_buttons'] = True
+        else:
+            context['show_csv_buttons'] = False
+        
+        return super().render_change_form(request, context, add, change, form_url, obj)
+    
+    
     def response_change(self, request, obj):
         """Обработка кнопок действий"""
         if "_auto_detect_delimiter" in request.POST:
@@ -126,6 +142,26 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
         
         return super().response_change(request, obj)
     
+    def rows_count_display(self, obj):
+        """Отображает количество строк или статус"""
+        if obj.rows_count is not None:
+            return obj.rows_count
+        elif obj.status == 'uploading':
+            return "Не обработано"
+        else:
+            return "—"
+    rows_count_display.short_description = 'Строк'
+    
+    def columns_count_display(self, obj):
+        """Отображает количество столбцов или статус"""
+        if obj.columns_count is not None:
+            return obj.columns_count
+        elif obj.status == 'uploading':
+            return "Не обработано"
+        else:
+            return "—"
+    columns_count_display.short_description = 'Столбцов'
+    
     def delimiter_display(self, obj):
         """Отображает разделитель в удобном виде"""
         delimiter_map = {
@@ -162,18 +198,18 @@ class CSVDataAdmin(admin.ModelAdmin):
         'upload_log', 
         'row_number', 
         'column_number', 
-        'column_name', 
+        'csv_column', 
         'cell_value_preview', 
         'created_at'
     ]
     list_filter = [
         'upload_log__filename', 
-        'column_name', 
+        'csv_column__column_name', 
         'created_at'
     ]
     search_fields = [
         'cell_value', 
-        'column_name', 
+        'csv_column__column_name', 
         'upload_log__filename'
     ]
     readonly_fields = ['created_at']
@@ -191,7 +227,7 @@ class CSVDataAdmin(admin.ModelAdmin):
             'fields': ('upload_log',)
         }),
         ('Позиция в файле', {
-            'fields': ('row_number', 'column_number', 'column_name')
+            'fields': ('row_number', 'column_number', 'csv_column')
         }),
         ('Данные', {
             'fields': ('cell_value', 'created_at')

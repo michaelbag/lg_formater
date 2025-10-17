@@ -339,6 +339,7 @@ class FieldMapping(models.Model):
         
         # Проверяем, что номер столбца не превышает количество столбцов в источнике данных
         if (self.generation and self.generation.data_source and 
+            self.data_column_number and self.generation.data_source.columns_count and
             self.data_column_number > self.generation.data_source.columns_count):
             raise ValidationError(
                 f"Номер столбца ({self.data_column_number}) не может быть больше "

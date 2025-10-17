@@ -1,0 +1,10 @@
+{% extends "admin/edit_inline/tabular.html" %}
+
+{% block fieldset %}
+<fieldset class="module aligned collapse">
+    <h2>📋 Логи генерации</h2>
+    <div class="form-row">
+        {{ inline_admin_form.form.logs_table }}
+    </div>
+</fieldset>
+{% endblock %}

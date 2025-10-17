@@ -15,6 +15,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from PIL import Image as PILImage
 import fitz  # PyMuPDF
+from pystrich.datamatrix import DataMatrixEncoder
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -216,35 +217,71 @@ class LabelPDFGenerator:
                 continue
             
             if value:
-                # Создаем стиль для поля
-                field_style = ParagraphStyle(
-                    f'Field_{field.id}',
-                    parent=self.text_style,
-                    fontSize=field.font_size or 10,
-                    leading=(field.font_size or 10) * 1.2,
-                    alignment={'left': TA_LEFT, 'center': TA_CENTER, 'right': TA_RIGHT, 'justify': TA_JUSTIFY}.get(field.alignment, TA_LEFT) if field.alignment else TA_LEFT,
-                    textColor=colors.black,
-                    fontName='Helvetica-Bold' if field.is_bold else 'Helvetica'
-                )
-                
-                # Создаем параграф с текстом
-                paragraph = Paragraph(value, field_style)
-                
                 # Позиционируем поле
                 # Конвертируем позицию из миллиметров в точки
                 x = (field.x_position or 0) * self.mm_to_points
                 y = (field.y_position or 0) * self.mm_to_points
                 
-                # Создаем контейнер с позиционированием
-                positioned_paragraph = self._create_positioned_flowable(
-                    paragraph, x, y, 
-                    field.width * self.mm_to_points if field.width else None,
-                    field.height * self.mm_to_points if field.height else None
-                )
-                
-                content.append(positioned_paragraph)
+                # Обрабатываем разные типы полей
+                if field.field_type == 'datamatrix':
+                    # Создаем DataMatrix код
+                    width = int(field.width * self.mm_to_points) if field.width else 100
+                    height = int(field.height * self.mm_to_points) if field.height else 100
+                    
+                    datamatrix_image = self._create_datamatrix_image(value, width, height)
+                    if datamatrix_image:
+                        positioned_image = self._create_positioned_flowable(
+                            datamatrix_image, x, y, width, height
+                        )
+                        content.append(positioned_image)
+                else:
+                    # Создаем стиль для текстового поля
+                    field_style = ParagraphStyle(
+                        f'Field_{field.id}',
+                        parent=self.text_style,
+                        fontSize=field.font_size or 10,
+                        leading=(field.font_size or 10) * 1.2,
+                        alignment={'left': TA_LEFT, 'center': TA_CENTER, 'right': TA_RIGHT, 'justify': TA_JUSTIFY}.get(field.alignment, TA_LEFT) if field.alignment else TA_LEFT,
+                        textColor=colors.black,
+                        fontName='Helvetica-Bold' if field.is_bold else 'Helvetica'
+                    )
+                    
+                    # Создаем параграф с текстом
+                    paragraph = Paragraph(value, field_style)
+                    
+                    # Создаем контейнер с позиционированием
+                    positioned_paragraph = self._create_positioned_flowable(
+                        paragraph, x, y, 
+                        field.width * self.mm_to_points if field.width else None,
+                        field.height * self.mm_to_points if field.height else None
+                    )
+                    
+                    content.append(positioned_paragraph)
         
         return content
+    
+    def _create_datamatrix_image(self, data: str, width: int, height: int) -> Optional[Image]:
+        """
+        Создание DataMatrix кода в виде изображения
+        """
+        try:
+            # Создаем DataMatrix код
+            encoder = DataMatrixEncoder(data)
+            encoder.width = width
+            encoder.height = height
+            
+            # Получаем данные изображения DataMatrix
+            img_data = encoder.get_imagedata()
+            
+            # Создаем BytesIO для обработки данных
+            img_buffer = io.BytesIO(img_data)
+            
+            # Создаем Image для ReportLab
+            return Image(img_buffer, width=width, height=height)
+            
+        except Exception as e:
+            self._log_error(f"Ошибка создания DataMatrix: {e}")
+            return None
     
     def _create_positioned_flowable(self, flowable: Flowable, x: float, y: float, 
                                   width: Optional[float] = None, height: Optional[float] = None) -> Flowable:
@@ -262,10 +299,25 @@ class LabelPDFGenerator:
                 self.canv.translate(self.x, self.y)
                 if self.width and self.height:
                     self.canv.rect(0, 0, self.width, self.height, fill=0, stroke=0)
-                self.flowable.drawOn(self.canv, 0, 0)
+                
+                # Для ReportLab 4.x используем правильный метод
+                try:
+                    # Пытаемся использовать drawOn для совместимости
+                    self.flowable.drawOn(self.canv, 0, 0)
+                except AttributeError:
+                    # Если drawOn не работает, используем альтернативный подход
+                    if hasattr(self.flowable, 'wrap'):
+                        w, h = self.flowable.wrap(self.width or 100, self.height or 100)
+                        self.flowable.drawOn(self.canv, 0, 0, w, h)
+                    else:
+                        # Для простых элементов используем прямой вызов draw
+                        self.flowable.draw()
+                
                 self.canv.restoreState()
             
             def wrap(self, availWidth, availHeight):
+                if hasattr(self.flowable, 'wrap'):
+                    return self.flowable.wrap(availWidth, availHeight)
                 return self.width or availWidth, self.height or availHeight
         
         return PositionedFlowable(flowable, x, y, width, height)

@@ -39,10 +39,14 @@ class CSVUploadLog(models.Model):
         help_text="Размер загруженного файла в байтах"
     )
     rows_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
         verbose_name="Количество строк",
         help_text="Общее количество строк в CSV файле"
     )
     columns_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
         verbose_name="Количество столбцов",
         help_text="Количество столбцов в CSV файле"
     )
@@ -118,6 +122,13 @@ class CSVUploadLog(models.Model):
                 self.file_size = self.original_file.size
             except (OSError, ValueError):
                 self.file_size = 0
+            
+            # Автоматически определяем количество строк и столбцов
+            try:
+                self._auto_detect_file_info()
+            except Exception:
+                # Если не удалось определить, оставляем поля пустыми
+                pass
         
         # Если автор не заполнен, пытаемся получить текущего пользователя
         if not self.author_id:
@@ -134,6 +145,68 @@ class CSVUploadLog(models.Model):
                     self.author = superuser
         
         super().save(*args, **kwargs)
+    
+    def _auto_detect_file_info(self):
+        """
+        Автоматически определяет количество строк и столбцов в CSV файле
+        """
+        if not self.original_file:
+            return
+        
+        import csv
+        import io
+        
+        try:
+            # Читаем файл
+            with open(self.original_file.path, 'r', encoding='utf-8') as file:
+                try:
+                    content = file.read()
+                except UnicodeDecodeError:
+                    # Пробуем другие кодировки
+                    file.seek(0)
+                    try:
+                        content = file.read(encoding='cp1251')
+                    except UnicodeDecodeError:
+                        file.seek(0)
+                        content = file.read(encoding='latin-1')
+            
+            # Сначала автоматически определяем разделитель
+            self._auto_detect_delimiter_from_content(content)
+            
+            # Создаем StringIO объект для csv.reader
+            csv_content = io.StringIO(content)
+            
+            # Читаем CSV с определенным разделителем
+            csv_reader = csv.reader(csv_content, delimiter=self.delimiter)
+            
+            rows = list(csv_reader)
+            
+            if rows:
+                # Определяем количество строк и столбцов
+                self.rows_count = len(rows)
+                self.columns_count = len(rows[0]) if rows[0] else 0
+                
+        except Exception:
+            # Если произошла ошибка, оставляем поля пустыми
+            pass
+    
+    def _auto_detect_delimiter_from_content(self, content):
+        """
+        Автоматически определяет разделитель из содержимого файла
+        """
+        # Подсчитываем количество каждого возможного разделителя
+        delimiter_counts = {}
+        possible_delimiters = [',', ';', '\t', '|', ':', ' ']
+        
+        for delimiter in possible_delimiters:
+            delimiter_counts[delimiter] = content.count(delimiter)
+        
+        # Возвращаем разделитель с максимальным количеством
+        best_delimiter = max(delimiter_counts, key=delimiter_counts.get)
+        
+        # Если нет разделителей, оставляем текущий
+        if delimiter_counts[best_delimiter] > 0:
+            self.delimiter = best_delimiter
     
     def auto_detect_delimiter(self):
         """
@@ -175,12 +248,14 @@ class CSVData(models.Model):
         verbose_name="Номер столбца",
         help_text="Номер столбца в CSV файле (начиная с 1)"
     )
-    column_name = models.CharField(
-        max_length=255,
-        blank=True,
+    csv_column = models.ForeignKey(
+        'CSVColumn',
+        on_delete=models.CASCADE,
+        related_name='csv_data',
         null=True,
-        verbose_name="Название столбца",
-        help_text="Название столбца (из первой строки CSV)"
+        blank=True,
+        verbose_name="Столбец CSV",
+        help_text="Ссылка на описание столбца CSV файла"
     )
     cell_value = models.TextField(
         verbose_name="Значение ячейки",
@@ -199,11 +274,12 @@ class CSVData(models.Model):
         indexes = [
             models.Index(fields=['upload_log', 'row_number']),
             models.Index(fields=['upload_log', 'column_number']),
-            models.Index(fields=['column_name']),
+            models.Index(fields=['csv_column']),
         ]
 
     def __str__(self):
-        return f"{self.upload_log.filename} - Строка {self.row_number}, Столбец {self.column_number}: {self.cell_value[:50]}"
+        column_name = self.csv_column.column_name if self.csv_column else f"Столбец {self.column_number}"
+        return f"{self.upload_log.filename} - Строка {self.row_number}, {column_name}: {self.cell_value[:50]}"
 
 
 class CSVColumn(models.Model):
