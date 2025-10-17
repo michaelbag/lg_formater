@@ -12,7 +12,8 @@ def template_upload_path(instance, filename):
     Генерирует путь для сохранения файлов шаблонов
     Формат: templates/YYYY/MM/DD/filename
     """
-    date = instance.created_at
+    from django.utils import timezone
+    date = instance.created_at or timezone.now()
     return f'templates/{date.year}/{date.month:02d}/{date.day:02d}/{filename}'
 
 
@@ -239,6 +240,23 @@ class LabelTemplate(models.Model):
 
         except Exception as e:
             raise ValidationError(f"Не удалось определить размеры файла: {e}")
+    
+    def auto_generate_name(self):
+        """
+        Автоматически генерирует название шаблона на основе имени файла и размеров
+        """
+        if not self.template_file:
+            return
+        
+        # Получаем имя файла без расширения
+        filename = os.path.splitext(os.path.basename(self.template_file.name))[0]
+        
+        # Добавляем размеры печатной области в скобках
+        if self.print_width_mm and self.print_height_mm:
+            dimensions = f"({self.print_width_mm}x{self.print_height_mm})"
+            self.name = f"{filename} {dimensions}"
+        else:
+            self.name = filename
 
     def clean(self):
         """
@@ -282,12 +300,10 @@ class LabelTemplate(models.Model):
         """
         Переопределяем save для автоматического определения размеров и заполнения created_by
         """
-        # Если это новый объект и есть файл, определяем размеры автоматически
-        if not self.pk and self.template_file:
-            self.auto_detect_dimensions()
+        is_new = not self.pk
         
         # Если это новый объект и created_by не заполнен, пытаемся получить текущего пользователя
-        if not self.pk and not self.created_by_id:
+        if is_new and not self.created_by_id:
             # Проверяем, есть ли текущий пользователь в контексте
             if hasattr(self, '_current_user') and self._current_user:
                 self.created_by = self._current_user
@@ -302,7 +318,19 @@ class LabelTemplate(models.Model):
         # Валидируем модель
         self.clean()
         
+        # Сохраняем объект
         super().save(*args, **kwargs)
+        
+        # После сохранения, если это новый объект и есть файл, определяем размеры автоматически
+        if is_new and self.template_file and os.path.exists(self.template_file.path):
+            self.auto_detect_dimensions()
+            
+            # Если название не задано, генерируем название автоматически
+            if not self.name:
+                self.auto_generate_name()
+            
+            # Сохраняем еще раз с обновленными размерами и названием
+            super().save(*args, **kwargs)
 
 
 class TemplateField(models.Model):

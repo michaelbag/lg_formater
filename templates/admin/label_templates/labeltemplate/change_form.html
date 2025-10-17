@@ -1,0 +1,43 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Автоматическое заполнение полей при загрузке формы
+        
+        // Проверяем, есть ли файл шаблона
+        var templateFileInput = document.querySelector('input[name="template_file"]');
+        var nameField = document.querySelector('input[name="name"]');
+        var createdByField = document.querySelector('select[name="created_by"]');
+        
+        // Автоматическое заполнение создателя
+        if (createdByField && !createdByField.value) {
+            // Получаем текущего пользователя из контекста Django
+            var currentUser = '{{ current_user.id }}';
+            if (currentUser && currentUser !== 'None') {
+                createdByField.value = currentUser;
+            }
+        }
+        
+        // Автоматическое заполнение названия при загрузке файла
+        if (templateFileInput) {
+            templateFileInput.addEventListener('change', function() {
+                if (this.files && this.files[0] && !nameField.value) {
+                    var fileName = this.files[0].name;
+                    var nameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
+                    nameField.value = nameWithoutExt;
+                }
+            });
+        }
+        
+        // Автоматическое заполнение названия при загрузке страницы, если файл уже есть
+        if (templateFileInput && templateFileInput.value && !nameField.value) {
+            var fileName = templateFileInput.value.split('/').pop();
+            var nameWithoutExt = fileName.replace(/\.[^/.]+$/, "");
+            nameField.value = nameWithoutExt;
+        }
+    });
+    </script>
+{% endblock %}

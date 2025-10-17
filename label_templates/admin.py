@@ -23,6 +23,8 @@ class LabelTemplateAdmin(admin.ModelAdmin):
     """
     Админ-панель для шаблонов этикеток
     """
+    change_form_template = 'admin/label_templates/labeltemplate/change_form.html'
+    
     list_display = [
         'name', 
         'template_type_display', 
@@ -91,6 +93,12 @@ class LabelTemplateAdmin(admin.ModelAdmin):
         if not change:  # Если это новый объект
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+    
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        """Передаем контекст в шаблон для автоматического заполнения полей"""
+        # Передаем текущего пользователя в контекст
+        context['current_user'] = request.user
+        return super().render_change_form(request, context, add, change, form_url, obj)
     
     def response_change(self, request, obj):
         """Обработка кнопки переопределения размеров"""

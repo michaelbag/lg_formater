@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib.units import mm, inch
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, BaseDocTemplate, PageTemplate, Frame
 from reportlab.platypus.flowables import Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
@@ -37,9 +37,13 @@ class LabelPDFGenerator:
         self.data_source = generation.data_source
         self.field_mappings = generation.field_mappings.all().order_by('order')
         
-        # Размеры страницы в миллиметрах
-        self.page_width_mm = self.template.layout_width_mm
-        self.page_height_mm = self.template.layout_height_mm
+        # Конвертация в точки (1 мм = 2.834645669 точек)
+        self.mm_to_points = 2.834645669
+        
+        # Размеры страницы в миллиметрах (используем A4)
+        from reportlab.lib.pagesizes import A4
+        self.page_width_mm = A4[0] / self.mm_to_points  # Конвертируем из точек в мм
+        self.page_height_mm = A4[1] / self.mm_to_points
         
         # Размеры области печати в миллиметрах
         self.print_width_mm = self.template.print_width_mm
@@ -52,14 +56,13 @@ class LabelPDFGenerator:
         # DPI для конвертации
         self.dpi = self.template.dpi
         
-        # Конвертация в точки (1 мм = 2.834645669 точек)
-        self.mm_to_points = 2.834645669
-        
         # Размеры в точках
         self.page_width = self.page_width_mm * self.mm_to_points
         self.page_height = self.page_height_mm * self.mm_to_points
         self.print_width = self.print_width_mm * self.mm_to_points
         self.print_height = self.print_height_mm * self.mm_to_points
+        self.layout_width = self.template.layout_width_mm * self.mm_to_points
+        self.layout_height = self.template.layout_height_mm * self.mm_to_points
         self.margin_left = self.margin_left_mm * self.mm_to_points
         self.margin_top = self.margin_top_mm * self.mm_to_points
         
@@ -70,6 +73,7 @@ class LabelPDFGenerator:
         # Данные для генерации
         self.csv_data = []
         self.template_background = None
+        self.template_background_type = None
         
     def _setup_styles(self):
         """Настройка стилей текста"""
@@ -100,12 +104,9 @@ class LabelPDFGenerator:
         if self.template.template_file and os.path.exists(self.template.template_file.path):
             try:
                 if self.template.template_type == 'pdf':
-                    # Для PDF используем PyMuPDF
-                    doc = fitz.open(self.template.template_file.path)
-                    page = doc[0]
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # Увеличиваем разрешение
-                    img_data = pix.tobytes("png")
-                    self.template_background = ImageReader(io.BytesIO(img_data))
+                    # Для PDF сохраняем путь к файлу для векторного рендеринга
+                    self.template_background = self.template.template_file.path
+                    self.template_background_type = 'pdf'
                 else:
                     # Для изображений используем PIL
                     pil_image = PILImage.open(self.template.template_file.path)
@@ -115,10 +116,13 @@ class LabelPDFGenerator:
                     img_data = io.BytesIO()
                     pil_image.save(img_data, format='PNG')
                     img_data.seek(0)
-                    self.template_background = ImageReader(img_data)
+                    # Сохраняем данные изображения для использования в Image()
+                    self.template_background = img_data
+                    self.template_background_type = 'image'
             except Exception as e:
                 self._log_error(f"Ошибка загрузки фонового изображения: {e}")
                 self.template_background = None
+                self.template_background_type = None
     
     def _load_csv_data(self):
         """Загрузка данных из CSV"""
@@ -190,20 +194,39 @@ class LabelPDFGenerator:
         
         return str(value) if value else ''
     
-    def _create_label_content(self, row_data: Dict[int, str]) -> List[Flowable]:
-        """Создание содержимого одной этикетки"""
+    def _create_custom_doc_template(self, temp_file, page_size):
+        """Создание кастомного шаблона документа без отступов"""
+        
+        class CustomDocTemplate(BaseDocTemplate):
+            def __init__(self, filename, pagesize, **kwargs):
+                BaseDocTemplate.__init__(self, filename, pagesize=pagesize, **kwargs)
+                
+                # Создаем фрейм без отступов
+                frame = Frame(
+                    0, 0, pagesize[0], pagesize[1],
+                    leftPadding=0,
+                    rightPadding=0,
+                    topPadding=0,
+                    bottomPadding=0
+                )
+                
+                # Создаем шаблон страницы
+                template = PageTemplate('normal', [frame])
+                self.addPageTemplates([template])
+        
+        return CustomDocTemplate(temp_file, page_size)
+    
+    def _create_page_content(self, row_data: Dict[int, str]) -> List[Flowable]:
+        """Создание содержимого одной страницы"""
         content = []
         
         # Добавляем фоновое изображение если есть
         if self.template_background:
             try:
-                # Создаем изображение с размерами области печати
-                background_img = Image(
-                    self.template_background,
-                    width=self.print_width,
-                    height=self.print_height
-                )
-                content.append(background_img)
+                # Создаем фоновое изображение с пропорциональным масштабированием
+                background_img = self._create_scaled_background_image()
+                if background_img:
+                    content.append(background_img)
             except Exception as e:
                 self._log_warning(f"Ошибка добавления фонового изображения: {e}")
         
@@ -259,6 +282,191 @@ class LabelPDFGenerator:
                     content.append(positioned_paragraph)
         
         return content
+    
+    def _create_scaled_background_image(self) -> Optional[Flowable]:
+        """
+        Создание фонового изображения с пропорциональным масштабированием
+        Максимально вписывает изображение в размеры страницы из шаблона
+        """
+        if not self.template_background:
+            return None
+        
+        try:
+            # Используем размеры страницы из шаблона
+            target_width_pt = self.layout_width
+            target_height_pt = self.layout_height
+            
+            if self.template_background_type == 'pdf':
+                # Для PDF создаем векторный элемент
+                return self._create_vector_pdf_background(target_width_pt, target_height_pt)
+            else:
+                # Для изображений используем растровый подход
+                return self._create_raster_background(target_width_pt, target_height_pt)
+                
+        except Exception as e:
+            self._log_error(f"Ошибка создания масштабированного фонового изображения: {e}")
+            return None
+    
+    def _create_vector_pdf_background(self, target_width_pt: float, target_height_pt: float) -> Flowable:
+        """
+        Создание векторного фонового PDF элемента
+        """
+        class VectorPDFBackground(Flowable):
+            def __init__(self, pdf_path, target_width, target_height, generator):
+                self.pdf_path = pdf_path
+                self.target_width = target_width
+                self.target_height = target_height
+                self.generator = generator
+                
+                # Получаем размеры исходного PDF
+                doc = fitz.open(pdf_path)
+                page = doc[0]
+                rect = page.rect
+                doc.close()
+                
+                self.original_width = rect.width
+                self.original_height = rect.height
+                
+                # Вычисляем коэффициенты масштабирования
+                scale_x = target_width / self.original_width
+                scale_y = target_height / self.original_height
+                self.scale = min(scale_x, scale_y)
+                
+                # Вычисляем новые размеры
+                self.new_width = self.original_width * self.scale
+                self.new_height = self.original_height * self.scale
+                
+                # Вычисляем позицию для центрирования
+                self.x_offset = (target_width - self.new_width) / 2
+                self.y_offset = (target_height - self.new_height) / 2
+                
+                # Устанавливаем размеры для ReportLab
+                self.width = target_width
+                self.height = target_height
+            
+            def draw(self):
+                try:
+                    # Открываем PDF
+                    doc = fitz.open(self.pdf_path)
+                    page = doc[0]
+                    
+                    # Создаем матрицу трансформации
+                    matrix = fitz.Matrix(self.scale, self.scale)
+                    
+                    # Получаем векторные данные страницы
+                    page_dict = page.get_drawings()
+                    
+                    # Рисуем векторные элементы
+                    for item in page_dict:
+                        if item['type'] == 'path':
+                            # Рисуем пути
+                            self.canv.saveState()
+                            self.canv.translate(self.x_offset, self.y_offset)
+                            
+                            # Применяем трансформацию
+                            if 'transform' in item:
+                                transform = item['transform']
+                                self.canv.transform(transform[0], transform[1], transform[2], 
+                                                  transform[3], transform[4], transform[5])
+                            
+                            # Рисуем путь
+                            if 'items' in item:
+                                for path_item in item['items']:
+                                    if path_item[0] == 'm':  # moveTo
+                                        self.canv.moveTo(path_item[1], path_item[2])
+                                    elif path_item[0] == 'l':  # lineTo
+                                        self.canv.lineTo(path_item[1], path_item[2])
+                                    elif path_item[0] == 'c':  # curveTo
+                                        self.canv.curveTo(path_item[1], path_item[2], 
+                                                        path_item[3], path_item[4],
+                                                        path_item[5], path_item[6])
+                                    elif path_item[0] == 'h':  # closePath
+                                        self.canv.closePath()
+                            
+                            # Применяем стили
+                            if 'fill' in item and item['fill']:
+                                self.canv.setFillColor(item['fill'])
+                                self.canv.fill()
+                            if 'stroke' in item and item['stroke']:
+                                self.canv.setStrokeColor(item['stroke'])
+                                self.canv.stroke()
+                            
+                            self.canv.restoreState()
+                    
+                    doc.close()
+                    
+                except Exception as e:
+                    # Если векторный рендеринг не удался, используем растровый
+                    self.generator._log_warning(f"Векторный рендеринг не удался, используем растровый: {e}")
+                    self._draw_raster_fallback()
+            
+            def _draw_raster_fallback(self):
+                """Fallback на растровый рендеринг"""
+                try:
+                    doc = fitz.open(self.pdf_path)
+                    page = doc[0]
+                    
+                    # Создаем высококачественное растровое изображение
+                    matrix = fitz.Matrix(3, 3)  # Высокое разрешение
+                    pix = page.get_pixmap(matrix=matrix)
+                    img_data = pix.tobytes("png")
+                    
+                    # Создаем изображение
+                    img_buffer = io.BytesIO(img_data)
+                    img = Image(img_buffer, width=self.new_width, height=self.new_height)
+                    
+                    # Рисуем изображение
+                    self.canv.saveState()
+                    self.canv.translate(self.x_offset, self.y_offset)
+                    img.drawOn(self.canv, 0, 0)
+                    self.canv.restoreState()
+                    
+                    doc.close()
+                    
+                except Exception as e:
+                    self.generator._log_error(f"Ошибка растрового fallback: {e}")
+        
+        return VectorPDFBackground(self.template_background, target_width_pt, target_height_pt, self)
+    
+    def _create_raster_background(self, target_width_pt: float, target_height_pt: float) -> Image:
+        """
+        Создание растрового фонового изображения
+        """
+        # Получаем размеры исходного изображения в пикселях
+        with PILImage.open(self.template_background) as img:
+            original_width_px, original_height_px = img.size
+            
+            # Вычисляем коэффициенты масштабирования
+            scale_x = target_width_pt / original_width_px
+            scale_y = target_height_pt / original_height_px
+            
+            # Используем минимальный коэффициент для пропорционального масштабирования
+            scale = min(scale_x, scale_y)
+            
+            # Вычисляем новые размеры в пикселях
+            new_width_px = int(original_width_px * scale)
+            new_height_px = int(original_height_px * scale)
+            
+            # Вычисляем позицию для центрирования в пикселях
+            x_offset_px = int((target_width_pt - new_width_px) / 2)
+            y_offset_px = int((target_height_pt - new_height_px) / 2)
+            
+            # Создаем изображение с новыми размерами
+            resized_img = img.resize((new_width_px, new_height_px), PILImage.Resampling.LANCZOS)
+            
+            # Создаем белый фон с размерами области печати
+            background = PILImage.new('RGB', (int(target_width_pt), int(target_height_pt)), 'white')
+            
+            # Вставляем масштабированное изображение в центр
+            background.paste(resized_img, (x_offset_px, y_offset_px))
+            
+            # Конвертируем в байты
+            img_buffer = io.BytesIO()
+            background.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            
+            # Создаем Image для ReportLab с размерами в точках
+            return Image(img_buffer, width=target_width_pt, height=target_height_pt)
     
     def _create_datamatrix_image(self, data: str, width: int, height: int) -> Optional[Image]:
         """
@@ -366,40 +574,32 @@ class LabelPDFGenerator:
             # Создаем временный файл
             temp_file = io.BytesIO()
             
-            # Создаем PDF документ
-            doc = SimpleDocTemplate(
-                temp_file,
-                pagesize=(self.page_width, self.page_height),
-                leftMargin=0,
-                rightMargin=0,
-                topMargin=0,
-                bottomMargin=0
-            )
+            # Определяем размер страницы из шаблона
+            page_size = (self.layout_width, self.layout_height)
+            
+            # Создаем кастомный PDF документ без отступов
+            doc = self._create_custom_doc_template(temp_file, page_size)
             
             # Собираем содержимое
             story = []
-            labels_per_page = self.generation.labels_per_page
-            labels_on_current_page = 0
             
             total_labels = len(self.csv_data)
             self.generation.total_labels = total_labels
             self.generation.save()
             
+            # Обрабатываем каждую строку данных как отдельную страницу
             for i, row_data in enumerate(self.csv_data):
                 try:
-                    # Создаем содержимое этикетки
-                    label_content = self._create_label_content(row_data)
+                    # Создаем содержимое страницы
+                    page_content = self._create_page_content(row_data)
                     
                     # Добавляем содержимое на страницу
-                    for item in label_content:
+                    for item in page_content:
                         story.append(item)
                     
-                    labels_on_current_page += 1
-                    
-                    # Если достигли лимита этикеток на страницу, добавляем разрыв страницы
-                    if labels_on_current_page >= labels_per_page and i < total_labels - 1:
+                    # Добавляем разрыв страницы (кроме последней)
+                    if i < total_labels - 1:
                         story.append(PageBreak())
-                        labels_on_current_page = 0
                     
                     # Обновляем прогресс
                     if (i + 1) % 10 == 0 or i == total_labels - 1:
