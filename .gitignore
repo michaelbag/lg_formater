@@ -150,5 +150,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-*.sqlite3
-*.db
+test_data.xlsx
+*.xlsx
+*.csv
+data_files/
+csv_files/

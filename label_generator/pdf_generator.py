@@ -22,7 +22,7 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from .models import LabelGeneration, FieldMapping, GenerationLog
-from data_sources.models import CSVData
+from data_sources.models import DataRecord
 from label_templates.models import LabelTemplate, TemplateField
 
 
@@ -132,7 +132,7 @@ class LabelPDFGenerator:
             end_row = self.generation.end_row or self.data_source.rows_count
             
             # Загружаем данные
-            csv_data_objects = CSVData.objects.filter(
+            csv_data_objects = DataRecord.objects.filter(
                 upload_log=self.data_source,
                 row_number__gte=start_row,
                 row_number__lte=end_row

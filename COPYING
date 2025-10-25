@@ -1,8 +1,7 @@
-#!/usr/bin/env python
-"""
-Django's command-line utility for administrative tasks.
+LG Formater - GNU Lesser General Public License v3.0
 
 Copyright (C) 2024 Kudryavtsev Mikhail
+
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -15,24 +14,8 @@ GNU Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
-import os
-import sys
 
+For the complete license text, see the LICENSE file.
 
-def main():
-    """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'lg_formater.settings')
-    try:
-        from django.core.management import execute_from_command_line
-    except ImportError as exc:
-        raise ImportError(
-            "Couldn't import Django. Are you sure it's installed and "
-            "available on your PYTHONPATH environment variable? Did you "
-            "forget to activate a virtual environment?"
-        ) from exc
-    execute_from_command_line(sys.argv)
-
-
-if __name__ == '__main__':
-    main()
+This is a symbolic link to the LICENSE file for compatibility with
+GNU/Linux systems that expect a COPYING file.

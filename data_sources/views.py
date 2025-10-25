@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, Http404
 from django.contrib.auth.decorators import login_required
 from django.utils.encoding import smart_str
-from .models import CSVUploadLog
+from .models import DataUploadLog
 import os
 
 
@@ -12,7 +12,7 @@ def download_csv_file(request, upload_id):
     Представление для скачивания исходного CSV файла
     """
     # Получаем запись о загрузке
-    upload_log = get_object_or_404(CSVUploadLog, id=upload_id)
+    upload_log = get_object_or_404(DataUploadLog, id=upload_id)
     
     # Проверяем, что файл существует
     if not upload_log.original_file:

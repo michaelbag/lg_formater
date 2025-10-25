@@ -455,7 +455,7 @@ class TemplateUsage(models.Model):
         help_text="Использованный шаблон"
     )
     data_source = models.ForeignKey(
-        'data_sources.CSVUploadLog',
+        'data_sources.DataUploadLog',
         on_delete=models.CASCADE,
         verbose_name="Источник данных",
         help_text="CSV файл с данными для генерации"

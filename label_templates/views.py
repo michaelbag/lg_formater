@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils.encoding import smart_str
 from django.views.decorators.http import require_http_methods
 from .models import LabelTemplate, TemplateField, TemplateUsage
-from data_sources.models import CSVUploadLog, CSVData
+from data_sources.models import DataUploadLog, DataRecord
 import os
 
 
@@ -129,7 +129,7 @@ def get_data_source_columns(request, data_source_id):
     """
     API для получения столбцов из источника данных
     """
-    data_source = get_object_or_404(CSVUploadLog, id=data_source_id)
+    data_source = get_object_or_404(DataUploadLog, id=data_source_id)
     
     # Проверяем права доступа
     if not (request.user == data_source.author or request.user.is_superuser):
@@ -179,7 +179,7 @@ def generate_labels(request):
     if request.method == 'GET':
         # Показываем форму выбора шаблона и источника данных
         templates = LabelTemplate.objects.filter(is_active=True)
-        data_sources = CSVUploadLog.objects.filter(
+        data_sources = DataUploadLog.objects.filter(
             status='completed',
             author=request.user
         ).order_by('-upload_date')

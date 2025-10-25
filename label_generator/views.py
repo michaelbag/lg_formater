@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.db.models import Q
 from .models import LabelGeneration, FieldMapping, GenerationLog
-from data_sources.models import CSVUploadLog, CSVColumn
+from data_sources.models import DataUploadLog, DataColumn
 from label_templates.models import LabelTemplate, TemplateField
 
 
@@ -53,7 +53,7 @@ def get_data_source_columns(request, data_source_id):
     """
     API для получения столбцов из источника данных
     """
-    data_source = get_object_or_404(CSVUploadLog, id=data_source_id)
+    data_source = get_object_or_404(DataUploadLog, id=data_source_id)
     
     # Проверяем права доступа
     if not (request.user == data_source.author or request.user.is_superuser):
@@ -63,8 +63,8 @@ def get_data_source_columns(request, data_source_id):
     columns = []
     
     if data_source.has_headers:
-        # Если есть заголовки, используем CSVColumn
-        csv_columns = data_source.csv_columns.all().order_by('column_number')
+        # Если есть заголовки, используем DataColumn
+        csv_columns = data_source.data_columns.all().order_by('column_number')
         for col in csv_columns:
             columns.append({
                 'number': col.column_number,
@@ -171,7 +171,7 @@ def create_generation(request):
     """
     if request.method == 'GET':
         # Показываем форму создания генерации
-        data_sources = CSVUploadLog.objects.filter(
+        data_sources = DataUploadLog.objects.filter(
             status='completed',
             author=request.user
         ).order_by('-upload_date')

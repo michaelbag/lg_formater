@@ -2,7 +2,7 @@ import csv
 import io
 from typing import List, Dict, Any, Optional
 from django.core.exceptions import ValidationError
-from .models import CSVUploadLog, CSVData, CSVColumn
+from .models import DataUploadLog, DataRecord, DataColumn
 
 
 class CSVProcessor:
@@ -10,7 +10,7 @@ class CSVProcessor:
     Класс для обработки CSV файлов с различными разделителями
     """
     
-    def __init__(self, upload_log: CSVUploadLog):
+    def __init__(self, upload_log: DataUploadLog):
         self.upload_log = upload_log
         self.delimiter = upload_log.delimiter
         self.has_headers = upload_log.has_headers
@@ -104,7 +104,7 @@ class CSVProcessor:
         Создает записи о столбцах CSV файла
         """
         for i, header in enumerate(headers, 1):
-            CSVColumn.objects.create(
+            DataColumn.objects.create(
                 upload_log=self.upload_log,
                 column_number=i,
                 column_name=header.strip(),
@@ -119,36 +119,36 @@ class CSVProcessor:
         Сохраняет данные CSV в базу данных
         """
         # Удаляем старые данные если есть
-        CSVData.objects.filter(upload_log=self.upload_log).delete()
+        DataRecord.objects.filter(upload_log=self.upload_log).delete()
         
         # Сохраняем новые данные
         for row_index, row in enumerate(rows[start_row-1:], start_row):
             for col_index, cell_value in enumerate(row, 1):
-                # Получаем объект CSVColumn для данного столбца
-                csv_column = self._get_csv_column(col_index)
-                CSVData.objects.create(
+                # Получаем объект DataColumn для данного столбца
+                data_column = self._get_data_column(col_index)
+                DataRecord.objects.create(
                     upload_log=self.upload_log,
                     row_number=row_index,
                     column_number=col_index,
-                    csv_column=csv_column,
+                    data_column=data_column,
                     cell_value=cell_value.strip() if cell_value else ''
                 )
     
-    def _get_csv_column(self, column_number: int) -> CSVColumn:
+    def _get_data_column(self, column_number: int) -> DataColumn:
         """
-        Получает объект CSVColumn по номеру столбца
+        Получает объект DataColumn по номеру столбца
         """
         # Сначала пытаемся найти существующий столбец
         try:
-            return CSVColumn.objects.get(
+            return DataColumn.objects.get(
                 upload_log=self.upload_log,
                 column_number=column_number
             )
-        except CSVColumn.DoesNotExist:
+        except DataColumn.DoesNotExist:
             pass
         
         # Если столбец не найден, создаем его
-        return CSVColumn.objects.create(
+        return DataColumn.objects.create(
             upload_log=self.upload_log,
             column_number=column_number,
             column_name=f"Столбец {column_number}",

@@ -4,3 +4,4 @@ from django.apps import AppConfig
 class LabelTemplatesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'label_templates'
+    verbose_name = 'Шаблоны этикеток'

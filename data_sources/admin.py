@@ -3,13 +3,13 @@ from django.utils.html import format_html
 from django.urls import reverse
 from django.contrib import messages
 from django.http import HttpResponseRedirect
-from .models import CSVUploadLog, CSVData, CSVColumn
+from .models import DataUploadLog, DataRecord, DataColumn
 
 
-@admin.register(CSVUploadLog)
-class CSVUploadLogAdmin(admin.ModelAdmin):
+@admin.register(DataUploadLog)
+class DataUploadLogAdmin(admin.ModelAdmin):
     """
-    Админ-панель для журнала загрузки CSV файлов
+    Админ-панель для журнала загрузки файлов данных
     """
     change_form_template = 'admin/data_sources/csvuploadlog/change_form.html'
     
@@ -17,6 +17,7 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
         'filename', 
         'author', 
         'upload_date', 
+        'file_type_display',
         'file_size', 
         'rows_count_display', 
         'columns_count_display', 
@@ -27,6 +28,7 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
     ]
     list_filter = [
         'status', 
+        'file_type',
         'has_headers',
         'delimiter',
         'upload_date', 
@@ -42,7 +44,8 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
         'upload_date', 
         'file_size', 
         'rows_count', 
-        'columns_count'
+        'columns_count',
+        'sheet_name'
     ]
     
     def get_form(self, request, obj=None, **kwargs):
@@ -64,10 +67,10 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Основная информация', {
-            'fields': ('filename', 'author', 'upload_date')
+            'fields': ('filename', 'author', 'upload_date', 'file_type')
         }),
         ('Параметры файла', {
-            'fields': ('file_size', 'rows_count', 'columns_count')
+            'fields': ('file_size', 'rows_count', 'columns_count', 'sheet_name')
         }),
         ('Настройки файла', {
             'fields': ('has_headers', 'delimiter', 'original_file')
@@ -124,23 +127,35 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
                     messages.error(request, f"Ошибка определения разделителя: {e}")
             return HttpResponseRedirect(request.path)
         
-        if "_process_csv" in request.POST:
+        if "_process_data" in request.POST:
             if not obj.original_file:
                 messages.warning(request, "Файл не загружен для обработки.")
             else:
                 try:
-                    result = obj.process_csv_data()
-                    messages.success(
-                        request, 
-                        f"CSV файл обработан успешно! "
-                        f"Строк: {result['rows_count']}, "
-                        f"Столбцов: {result['columns_count']}"
-                    )
+                    result = obj.process_data()
+                    if result.get('success'):
+                        messages.success(
+                            request, 
+                            f"Файл обработан успешно! "
+                            f"Строк: {result.get('rows_processed', 'N/A')}, "
+                            f"Столбцов: {result.get('columns_processed', 'N/A')}"
+                        )
+                    else:
+                        messages.error(request, f"Ошибка обработки файла: {result.get('error', 'Неизвестная ошибка')}")
                 except Exception as e:
-                    messages.error(request, f"Ошибка обработки CSV файла: {e}")
+                    messages.error(request, f"Ошибка обработки файла: {e}")
             return HttpResponseRedirect(request.path)
         
         return super().response_change(request, obj)
+    
+    def file_type_display(self, obj):
+        """Отображает тип файла"""
+        type_map = {
+            'csv': 'CSV',
+            'xlsx': 'Excel (XLSX)',
+        }
+        return type_map.get(obj.file_type, obj.file_type.upper())
+    file_type_display.short_description = 'Тип файла'
     
     def rows_count_display(self, obj):
         """Отображает количество строк или статус"""
@@ -189,27 +204,27 @@ class CSVUploadLogAdmin(admin.ModelAdmin):
     download_link.short_description = 'Скачать файл'
 
 
-@admin.register(CSVData)
-class CSVDataAdmin(admin.ModelAdmin):
+@admin.register(DataRecord)
+class DataRecordAdmin(admin.ModelAdmin):
     """
-    Админ-панель для данных CSV файлов
+    Админ-панель для записей данных
     """
     list_display = [
         'upload_log', 
         'row_number', 
         'column_number', 
-        'csv_column', 
+        'data_column', 
         'cell_value_preview', 
         'created_at'
     ]
     list_filter = [
         'upload_log__filename', 
-        'csv_column__column_name', 
+        'data_column__column_name', 
         'created_at'
     ]
     search_fields = [
         'cell_value', 
-        'csv_column__column_name', 
+        'data_column__column_name', 
         'upload_log__filename'
     ]
     readonly_fields = ['created_at']
@@ -227,7 +242,7 @@ class CSVDataAdmin(admin.ModelAdmin):
             'fields': ('upload_log',)
         }),
         ('Позиция в файле', {
-            'fields': ('row_number', 'column_number', 'csv_column')
+            'fields': ('row_number', 'column_number', 'data_column')
         }),
         ('Данные', {
             'fields': ('cell_value', 'created_at')
@@ -235,10 +250,10 @@ class CSVDataAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(CSVColumn)
-class CSVColumnAdmin(admin.ModelAdmin):
+@admin.register(DataColumn)
+class DataColumnAdmin(admin.ModelAdmin):
     """
-    Админ-панель для столбцов CSV файлов
+    Админ-панель для столбцов данных
     """
     list_display = [
         'upload_log', 

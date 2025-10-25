@@ -1,3 +1,8 @@
+# LG Formater - Requirements
+# Copyright (C) 2024 Kudryavtsev Mikhail
+# Licensed under GNU Lesser General Public License v3.0 (LGPL-3.0)
+# See LICENSE file for full license text
+
 Django==5.2.7
 asgiref==3.10.0
 sqlparse==0.5.3
@@ -5,3 +10,4 @@ Pillow==12.0.0
 PyMuPDF==1.26.5
 reportlab==4.4.4
 python-dateutil==2.9.0
+openpyxl==3.1.2
